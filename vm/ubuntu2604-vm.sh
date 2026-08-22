@@ -5,19 +5,6 @@
 # License: MIT | https://github.com/community-scripts/ProxmoxVED/raw/main/LICENSE
 
 source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/pve/vm-core.func")
-load_functions
-_ubuntu_cloud_init_func="$(dirname "${BASH_SOURCE[0]:-.}")/ubuntu-cloud-init.func"
-if [[ -f "$_ubuntu_cloud_init_func" ]]; then
-  source "$_ubuntu_cloud_init_func"
-else
-  source <(curl -fsSL "${COMMUNITY_SCRIPTS_URL}/vm/ubuntu-cloud-init.func")
-fi
-unset _ubuntu_cloud_init_func
-
-function get_valid_nextid() {
-  ubuntu_get_valid_nextid
-}
-
 APP="Ubuntu 26.04 VM"
 APP_TYPE="vm"
 NSAPP="ubuntu2604-vm"
@@ -35,6 +22,19 @@ function header_info() {
  /_/ / /_/ / /_/ / / / / /_/ /_/ /   / __/__  __/ / / /_/ /    | |/ / /  / /
 \____/_.___/\__,_/_/ /_/\__\/\__,_/   /____/ /_/ (_)_/\____/     |___/_/  /_/  (Ubuntu 26.04)
 EOF
+}
+
+load_functions
+_ubuntu_cloud_init_func="$(dirname "${BASH_SOURCE[0]:-.}")/ubuntu-cloud-init.func"
+if [[ -f "$_ubuntu_cloud_init_func" ]]; then
+  source "$_ubuntu_cloud_init_func"
+else
+  source <(curl -fsSL "${COMMUNITY_SCRIPTS_URL}/vm/ubuntu-cloud-init.func")
+fi
+unset _ubuntu_cloud_init_func
+
+function get_valid_nextid() {
+  ubuntu_get_valid_nextid
 }
 
 GEN_MAC=02:$(openssl rand -hex 5 | awk '{print toupper($0)}' | sed 's/\(..\)/\1:/g; s/.$//')
