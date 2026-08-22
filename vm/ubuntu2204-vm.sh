@@ -216,6 +216,7 @@ function default_settings() {
 
 function advanced_settings() {
   METHOD="advanced"
+  DISK_SIZE="${DISK_SIZE:-5G}"
   [ -z "${VMID:-}" ] && VMID=$(get_valid_nextid)
   ubuntu_configure_cloud_init_advanced || exit-script
   while true; do
@@ -252,7 +253,8 @@ function advanced_settings() {
     exit-script
   fi
 
-  if DISK_SIZE=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Set Disk Size in GiB (e.g., 10, 20)" 8 58 "$DISK_SIZE" --title "DISK SIZE" --cancel-button Exit-Script 3>&1 1>&2 2>&3); then
+  if DISK_SIZE=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Set Disk Size in GiB (e.g., 10G, 20G)" 8 58 "$DISK_SIZE" --title "DISK SIZE" --cancel-button Exit-Script 3>&1 1>&2 2>&3); then
+    DISK_SIZE="${DISK_SIZE:-5G}"
     DISK_SIZE=$(echo "$DISK_SIZE" | tr -d ' ')
     if [[ "$DISK_SIZE" =~ ^[0-9]+$ ]]; then
       DISK_SIZE="${DISK_SIZE}G"
@@ -260,7 +262,7 @@ function advanced_settings() {
     elif [[ "$DISK_SIZE" =~ ^[0-9]+G$ ]]; then
       echo -e "${DISKSIZE}${BOLD}${DGN}Disk Size: ${BGN}$DISK_SIZE${CL}"
     else
-      echo -e "${DISKSIZE}${BOLD}${RD}Invalid Disk Size. Please use a number (e.g., 10 or 10G).${CL}"
+      echo -e "${DISKSIZE}${BOLD}${RD}Invalid Disk Size. Please use a size such as 10G or 20G.${CL}"
       exit-script
     fi
   else
