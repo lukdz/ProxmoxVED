@@ -12,6 +12,42 @@ if ! declare -f setup_cloud_init >/dev/null 2>&1; then
   unset _ubuntu_core_dir
 fi
 
+ubuntu_vmid_has_storage_volume() {
+  local vmid="$1"
+  local storage
+
+  while IFS= read -r storage; do
+    [[ -n "$storage" ]] || continue
+    if pvesm list "$storage" 2>/dev/null | awk -v vmid="$vmid" \
+      'NR > 1 && ($1 ~ ("vm-" vmid "-disk-[0-9]+") || $5 == vmid) {found=1} END {exit !found}'; then
+      return 0
+    fi
+  done < <(pvesm status -content images 2>/dev/null | awk 'NR > 1 {print $1}')
+
+  if command -v zfs >/dev/null 2>&1 && zfs list -H -t volume -o name 2>/dev/null |
+    awk -v vmid="$vmid" '$0 ~ ("/vm-" vmid "-disk-[0-9]+(\\.|$)") {found=1} END {exit !found}'; then
+    return 0
+  fi
+  return 1
+}
+
+ubuntu_get_valid_nextid() {
+  local try_id
+
+  try_id=$(pvesh get /cluster/nextid)
+  while true; do
+    if [[ -f "/etc/pve/qemu-server/${try_id}.conf" ]] ||
+      [[ -f "/etc/pve/lxc/${try_id}.conf" ]] ||
+      lvs --noheadings -o lv_name 2>/dev/null | grep -qE "(^|[-_])${try_id}($|[-_])" ||
+      ubuntu_vmid_has_storage_volume "$try_id"; then
+      try_id=$((try_id + 1))
+      continue
+    fi
+    echo "$try_id"
+    return 0
+  done
+}
+
 ubuntu_validate_cloud_init_user() {
   local user="$1"
   [[ "$user" =~ ^[a-z_][a-z0-9_-]*$ ]] && [[ "${#user}" -le 32 ]]
@@ -444,6 +480,7 @@ More info at https://github.com/community-scripts/ProxmoxVED/discussions/272 \n"
 }
 
 export -f ubuntu_validate_cloud_init_user ubuntu_validate_ssh_key_file \
+  ubuntu_vmid_has_storage_volume ubuntu_get_valid_nextid \
   ubuntu_normalize_ssh_key_file ubuntu_discover_host_ssh_keys \
   ubuntu_configure_ssh_keys ubuntu_configure_cloud_init_credentials \
   ubuntu_configure_cloud_init_default ubuntu_configure_cloud_init_advanced \

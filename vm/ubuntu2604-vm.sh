@@ -14,6 +14,10 @@ else
 fi
 unset _ubuntu_cloud_init_func
 
+function get_valid_nextid() {
+  ubuntu_get_valid_nextid
+}
+
 APP="Ubuntu 26.04 VM"
 APP_TYPE="vm"
 NSAPP="ubuntu2604-vm"
