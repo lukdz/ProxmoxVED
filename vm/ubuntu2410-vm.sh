@@ -6,6 +6,13 @@
 
 COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://git.community-scripts.org/community-scripts/ProxmoxVED/raw/branch/main}"
 source /dev/stdin <<<$(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/api/api.func")
+_ubuntu_cloud_init_func="$(dirname "${BASH_SOURCE[0]}")/ubuntu-cloud-init.func"
+if [[ -f "$_ubuntu_cloud_init_func" ]]; then
+  source "$_ubuntu_cloud_init_func"
+else
+  source <(curl -fsSL "${COMMUNITY_SCRIPTS_URL}/vm/ubuntu-cloud-init.func")
+fi
+unset _ubuntu_cloud_init_func
 
 function header_info {
   clear
@@ -199,6 +206,7 @@ function init_settings() {
 
 function default_settings() {
   METHOD="default"
+  ubuntu_configure_cloud_init_default
   echo -e "${CONTAINERID}${BOLD}${DGN}Virtual Machine ID: ${BGN}${VMID}${CL}"
   echo -e "${HOSTNAME}${BOLD}${DGN}Hostname: ${BGN}${HN}${CL}"
   echo -e "${CPUCORE}${BOLD}${DGN}CPU Cores: ${BGN}${CORE_COUNT}${CL}"
@@ -327,6 +335,7 @@ function validate_env_settings() {
 
 function advanced_settings() {
   METHOD="advanced"
+  ubuntu_configure_cloud_init_advanced || exit-script
   [ -z "${VMID:-}" ] && VMID=$(get_valid_nextid)
   while true; do
     if VMID=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Set Virtual Machine ID" 8 58 $VMID --title "VIRTUAL MACHINE ID" --cancel-button Exit-Script 3>&1 1>&2 2>&3); then
@@ -521,6 +530,7 @@ function start_script() {
     echo -e "${ADVANCED}${BOLD}${BL}Using Environment Variable Overrides${CL}"
     METHOD="env"
     apply_env_overrides
+    ubuntu_configure_cloud_init_default
   elif (whiptail --backtitle "Proxmox VE Helper Scripts" --title "SETTINGS" --yesno "Use Default Settings?" --no-button Advanced 10 58); then
     echo -e "${DEFAULT}${BOLD}${BL}Using Default Settings${CL}"
     default_settings
@@ -574,6 +584,8 @@ echo -en "\e[1A\e[0K"
 FILE=$(basename $URL)
 msg_ok "Downloaded ${CL}${BL}${FILE}${CL}"
 
+ubuntu_configure_image_access "$FILE"
+
 STORAGE_TYPE=$(pvesm status -storage $STORAGE | awk 'NR>1 {print $2}')
 case $STORAGE_TYPE in
 nfs | dir | cifs)
@@ -606,11 +618,13 @@ qm importdisk $VMID ${FILE} $STORAGE ${DISK_IMPORT:-} 1>&/dev/null
 qm set $VMID \
   -efidisk0 ${DISK0_REF}${FORMAT} \
   -scsi0 ${DISK1_REF},${DISK_CACHE}${THIN}size=${DISK_SIZE} \
-  -ide2 ${STORAGE}:cloudinit \
   -boot order=scsi0 \
   -serial0 socket \
   -smbios1 type=1 \
-  --ciuser "ubuntu" -cipassword "ubuntu" >/dev/null
+  >/dev/null
+if [ "${CLOUDINIT_ENABLE:-no}" = "yes" ]; then
+  ubuntu_setup_cloud_init "$MAC"
+fi
 DESCRIPTION=$(
   cat <<EOF
 <div align='center'>
@@ -653,6 +667,8 @@ else
 fi
 
 msg_ok "Created a $APP ${CL}${BL}(${HN})"
+ubuntu_display_cloud_init_info
+ubuntu_cleanup_cloud_init
 if [ "$START_VM" == "yes" ]; then
   msg_info "Starting $APP"
   qm start $VMID
@@ -660,5 +676,3 @@ if [ "$START_VM" == "yes" ]; then
 fi
 post_update_to_api "done" "none"
 msg_ok "Completed successfully!\n"
-echo -e "Setup Cloud-Init before starting \n
-More info at https://github.com/community-scripts/ProxmoxVE/discussions/272 \n"
