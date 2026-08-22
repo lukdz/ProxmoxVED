@@ -140,11 +140,90 @@ ubuntu_discover_host_ssh_keys() {
   return 1
 }
 
+ubuntu_select_host_ssh_keys() {
+  local key_file
+  local key
+  local extracted_key
+  local key_type
+  local key_blob
+  local key_comment
+  local fingerprint
+  local selection
+  local tag
+  local key_index
+  local selected_count=0
+  local selected_file="${TEMP_DIR:-/tmp}/cloud-init-sshkeys"
+  local -a key_files=()
+  local -a keys=()
+  local -a choices=()
+
+  if [[ "$#" -gt 0 ]]; then
+    key_files=("$@")
+  else
+    for key_file in /root/.ssh/authorized_keys /root/.ssh/authorized_keys2 /root/.ssh/*.pub \
+      /etc/ssh/authorized_keys /etc/ssh/authorized_keys.d/*; do
+      [[ -f "$key_file" && -r "$key_file" ]] && key_files+=("$key_file")
+    done
+  fi
+
+  for key_file in "${key_files[@]}"; do
+    while IFS= read -r key || [[ -n "$key" ]]; do
+      key="${key%$'\r'}"
+      [[ -z "${key//[[:space:]]/}" || "$key" == \#* ]] && continue
+      extracted_key=$(printf '%s\n' "$key" | awk '{for (i = 1; i <= NF; i++) if ($i ~ /^(ssh-(rsa|ed25519|dss|ecdsa)|ecdsa-sha2-)/) {print substr($0, index($0, $i)); exit}}')
+      [[ -n "$extracted_key" ]] || continue
+      printf '%s\n' "$extracted_key" | ssh-keygen -lf - >/dev/null 2>&1 || continue
+
+      read -r key_type key_blob key_comment <<<"$extracted_key"
+      [[ "$key_comment" == "$key_blob" ]] && key_comment=""
+      fingerprint=$(printf '%s\n' "$extracted_key" | ssh-keygen -lf - 2>/dev/null | awk '{print $2}')
+      keys+=("$extracted_key")
+      key_index="K${#keys[@]}"
+      choices+=("$key_index" "[$key_type] ${fingerprint:-unknown} ${key_comment:+$key_comment }- $(basename -- "$key_file")" "OFF")
+    done <"$key_file"
+  done
+
+  if [[ "${#keys[@]}" -eq 0 ]]; then
+    whiptail --backtitle "Proxmox VE Helper Scripts" --title "NO HOST SSH KEYS" \
+      --msgbox "No valid public SSH keys were found on the Proxmox host." 8 64
+    return 65
+  fi
+
+  if ! selection=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "SELECT PROXMOX HOST SSH KEYS" \
+    --checklist "Select the public keys to copy into the VM." 20 110 10 "${choices[@]}" 3>&1 1>&2 2>&3); then
+    return 1
+  fi
+
+  rm -f "$selected_file"
+  : >"$selected_file"
+  for tag in $selection; do
+    tag="${tag%\"}"
+    tag="${tag#\"}"
+    key_index="${tag#K}"
+    if [[ "$key_index" =~ ^[0-9]+$ ]] && [[ -n "${keys[$((key_index - 1))]:-}" ]]; then
+      printf '%s\n' "${keys[$((key_index - 1))]}" >>"$selected_file"
+      selected_count=$((selected_count + 1))
+    fi
+  done
+
+  if [[ "$selected_count" -eq 0 ]]; then
+    rm -f "$selected_file"
+    CLOUDINIT_SSH_KEYS=""
+    CLOUDINIT_SSH_KEYS_TEMP=""
+    echo -e "${ROOTSSH:-${TAB:-  }[SSH]${TAB:-  }${CL:-}}${BOLD:-}${DGN:-}SSH Keys: ${BGN:-}none selected${CL:-}"
+    return 0
+  fi
+
+  CLOUDINIT_SSH_KEYS="$selected_file"
+  CLOUDINIT_SSH_KEYS_TEMP="$selected_file"
+  chmod 600 "$selected_file"
+  echo -e "${ROOTSSH:-${TAB:-  }[SSH]${TAB:-  }${CL:-}}${BOLD:-}${DGN:-}SSH Keys: ${BGN:-}${selected_count} selected${CL:-}"
+}
+
 ubuntu_configure_ssh_keys() {
   local key_source
   local key_value
   local key_file="${TEMP_DIR:-/tmp}/cloud-init-sshkeys"
-  local host_key_file
 
   rm -f "$key_file"
   if key_source=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "SSH KEY" --menu \
@@ -156,14 +235,8 @@ ubuntu_configure_ssh_keys() {
     "none" "Do not configure an SSH key" 3>&1 1>&2 2>&3); then
     case "$key_source" in
     host)
-      if host_key_file=$(ubuntu_discover_host_ssh_keys); then
-        cp "$host_key_file" "$key_file"
-        CLOUDINIT_HOST_KEY_FILE="$host_key_file"
-      else
-        whiptail --backtitle "Proxmox VE Helper Scripts" --title "NO HOST SSH KEYS" \
-          --msgbox "No valid public SSH keys were found in /root/.ssh/." 8 58
-        return 65
-      fi
+      ubuntu_select_host_ssh_keys
+      return $?
       ;;
     paste)
       if key_value=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox \
@@ -509,6 +582,7 @@ More info at https://github.com/community-scripts/ProxmoxVED/discussions/272 \n"
 
 export -f ubuntu_validate_cloud_init_user ubuntu_validate_ssh_key_file \
   ubuntu_vmid_has_storage_volume ubuntu_get_valid_nextid ubuntu_configure_storage_layout \
+  ubuntu_select_host_ssh_keys \
   ubuntu_normalize_ssh_key_file ubuntu_discover_host_ssh_keys \
   ubuntu_configure_ssh_keys ubuntu_configure_cloud_init_credentials \
   ubuntu_configure_cloud_init_default ubuntu_configure_cloud_init_advanced \
