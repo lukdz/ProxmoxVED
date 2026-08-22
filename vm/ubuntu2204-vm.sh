@@ -465,7 +465,7 @@ nfs | dir | cifs)
   DISK_IMPORT="-format qcow2"
   THIN=""
   ;;
-btrfs)
+btrfs | zfspool | local-zfs)
   DISK_EXT=".raw"
   DISK_REF="$VMID/"
   DISK_IMPORT="-format raw"
