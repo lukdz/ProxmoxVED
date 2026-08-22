@@ -620,7 +620,6 @@ qm set $VMID \
   -scsi0 ${DISK1_REF},${DISK_CACHE}${THIN}size=${DISK_SIZE} \
   -boot order=scsi0 \
   -serial0 socket \
-  -smbios1 type=1 \
   >/dev/null
 if [ "${CLOUDINIT_ENABLE:-no}" = "yes" ]; then
   ubuntu_setup_cloud_init "$MAC"
