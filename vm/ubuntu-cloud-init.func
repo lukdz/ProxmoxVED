@@ -53,7 +53,7 @@ ubuntu_configure_storage_layout() {
   local storage_name="${2:-}"
 
   if [[ "$storage_name" == "local-zfs" || "$storage_type" == "zfspool" ]]; then
-    DISK_EXT=".raw"
+    DISK_EXT=""
     DISK_REF=""
     DISK_IMPORT="-format raw"
     FORMAT=",efitype=4m"
