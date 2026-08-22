@@ -3,7 +3,7 @@
 # Shared Cloud-Init setup for Ubuntu cloud-image VM scripts.
 
 if ! declare -f setup_cloud_init >/dev/null 2>&1; then
-  _ubuntu_core_dir="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}"
+  _ubuntu_core_dir="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]:-.}")/../../core}"
   if [[ -f "${_ubuntu_core_dir}/vm/cloud-init.func" ]]; then
     source "${_ubuntu_core_dir}/vm/cloud-init.func"
   else
