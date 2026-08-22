@@ -581,12 +581,24 @@ nfs | dir | cifs)
   DISK_IMPORT="-format qcow2"
   THIN=""
   ;;
-btrfs | zfspool | local-zfs)
+btrfs)
   DISK_EXT=".raw"
   DISK_REF="$VMID/"
   DISK_IMPORT="-format raw"
   FORMAT=",efitype=4m"
   THIN=""
+  ;;
+zfspool | local-zfs)
+  DISK_EXT=".raw"
+  DISK_REF=""
+  DISK_IMPORT="-format raw"
+  FORMAT=",efitype=4m"
+  THIN=""
+  ;;
+*)
+  DISK_EXT=""
+  DISK_REF=""
+  DISK_IMPORT="-format raw"
   ;;
 esac
 for i in {0,1}; do
