@@ -7,7 +7,7 @@
 
 COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://git.community-scripts.org/community-scripts/ProxmoxVED/raw/branch/main}"
 source /dev/stdin <<<$(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/api/api.func")
-_ubuntu_cloud_init_func="$(dirname "${BASH_SOURCE[0]}")/ubuntu-cloud-init.func"
+_ubuntu_cloud_init_func="$(dirname "${BASH_SOURCE[0]:-.}")/ubuntu-cloud-init.func"
 if [[ -f "$_ubuntu_cloud_init_func" ]]; then
   source "$_ubuntu_cloud_init_func"
 else

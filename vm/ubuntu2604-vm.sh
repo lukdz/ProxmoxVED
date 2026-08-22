@@ -6,7 +6,7 @@
 
 source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/pve/vm-core.func")
 load_functions
-_ubuntu_cloud_init_func="$(dirname "${BASH_SOURCE[0]}")/ubuntu-cloud-init.func"
+_ubuntu_cloud_init_func="$(dirname "${BASH_SOURCE[0]:-.}")/ubuntu-cloud-init.func"
 if [[ -f "$_ubuntu_cloud_init_func" ]]; then
   source "$_ubuntu_cloud_init_func"
 else
