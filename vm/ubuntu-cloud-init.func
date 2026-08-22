@@ -48,6 +48,34 @@ ubuntu_get_valid_nextid() {
   done
 }
 
+ubuntu_configure_storage_layout() {
+  local storage_type="$1"
+  local storage_name="${2:-}"
+
+  if [[ "$storage_name" == "local-zfs" || "$storage_type" == "zfspool" ]]; then
+    DISK_EXT=".raw"
+    DISK_REF=""
+    DISK_IMPORT="-format raw"
+    FORMAT=",efitype=4m"
+    THIN=""
+  elif [[ "$storage_type" == "btrfs" ]]; then
+    DISK_EXT=".raw"
+    DISK_REF="$VMID/"
+    DISK_IMPORT="-format raw"
+    FORMAT=",efitype=4m"
+    THIN=""
+  elif [[ "$storage_type" == "nfs" || "$storage_type" == "dir" || "$storage_type" == "cifs" ]]; then
+    DISK_EXT=".qcow2"
+    DISK_REF="$VMID/"
+    DISK_IMPORT="-format qcow2"
+    THIN=""
+  else
+    DISK_EXT=""
+    DISK_REF=""
+    DISK_IMPORT="-format raw"
+  fi
+}
+
 ubuntu_validate_cloud_init_user() {
   local user="$1"
   [[ "$user" =~ ^[a-z_][a-z0-9_-]*$ ]] && [[ "${#user}" -le 32 ]]
@@ -480,7 +508,7 @@ More info at https://github.com/community-scripts/ProxmoxVED/discussions/272 \n"
 }
 
 export -f ubuntu_validate_cloud_init_user ubuntu_validate_ssh_key_file \
-  ubuntu_vmid_has_storage_volume ubuntu_get_valid_nextid \
+  ubuntu_vmid_has_storage_volume ubuntu_get_valid_nextid ubuntu_configure_storage_layout \
   ubuntu_normalize_ssh_key_file ubuntu_discover_host_ssh_keys \
   ubuntu_configure_ssh_keys ubuntu_configure_cloud_init_credentials \
   ubuntu_configure_cloud_init_default ubuntu_configure_cloud_init_advanced \
