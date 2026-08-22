@@ -184,7 +184,7 @@ ubuntu_configure_cloud_init_credentials() {
   CLOUDINIT_HOST_KEY_FILE=""
   while true; do
     if CLOUDINIT_PASSWORD=$(whiptail --backtitle "Proxmox VE Helper Scripts" --passwordbox \
-      "Set a password for ${CLOUDINIT_USER}. A password is optional when an SSH key is configured in the next step." \
+      "Set a password for ${CLOUDINIT_USER}. Leave blank for console-only access through Proxmox. A password is optional when an SSH key is configured in the next step." \
       10 70 --title "CLOUD-INIT PASSWORD" --cancel-button Exit-Script 3>&1 1>&2 2>&3); then
       if [[ -n "$CLOUDINIT_PASSWORD" ]]; then
         if password_confirm=$(whiptail --backtitle "Proxmox VE Helper Scripts" --passwordbox \
@@ -207,19 +207,20 @@ ubuntu_configure_cloud_init_credentials() {
     ubuntu_configure_ssh_keys || key_status=$?
     [[ "$key_status" -eq 65 ]] && continue
     [[ "$key_status" -eq 0 ]] || return "$key_status"
-    if [[ -n "$CLOUDINIT_PASSWORD" || -n "${CLOUDINIT_SSH_KEYS:-}" ]]; then
-      break
-    fi
-    whiptail --backtitle "Proxmox VE Helper Scripts" --title "LOGIN REQUIRED" \
-      --msgbox "Configure a password or an SSH public key so the VM can be accessed after its first boot." 10 70
+    break
   done
 
   if [[ -n "${CLOUDINIT_SSH_KEYS:-}" ]]; then
     CLOUDINIT_SSH_PWAUTH="no"
-  else
+    CLOUDINIT_ACCESS_MODE="ssh-key"
+  elif [[ -n "$CLOUDINIT_PASSWORD" ]]; then
     CLOUDINIT_SSH_PWAUTH="yes"
+    CLOUDINIT_ACCESS_MODE="password"
+  else
+    CLOUDINIT_SSH_PWAUTH="no"
+    CLOUDINIT_ACCESS_MODE="console"
   fi
-  export CLOUDINIT_PASSWORD CLOUDINIT_SSH_PWAUTH
+  export CLOUDINIT_PASSWORD CLOUDINIT_SSH_PWAUTH CLOUDINIT_ACCESS_MODE
 }
 
 ubuntu_configure_cloud_init_default() {
@@ -238,17 +239,19 @@ ubuntu_configure_cloud_init_default() {
     CLOUDINIT_SSH_KEYS="${TEMP_DIR:-/tmp}/cloud-init-host-sshkeys"
     CLOUDINIT_SSH_KEYS_TEMP="$CLOUDINIT_SSH_KEYS"
     CLOUDINIT_SSH_PWAUTH="no"
+    CLOUDINIT_ACCESS_MODE="ssh-key"
     echo -e "${ROOTSSH:-${TAB:-  }[SSH]${TAB:-  }${CL:-}}${BOLD:-}${DGN:-}SSH Keys: ${BGN:-}host keys selected${CL:-}"
     echo -e "${CLOUD:-${TAB:-  }[Cloud-Init]${TAB:-  }${CL:-}}${BOLD:-}${DGN:-}Cloud-Init access: ${BGN:-}${CLOUDINIT_USER} with SSH key authentication${CL:-}"
   else
     CLOUDINIT_SSH_KEYS=""
     CLOUDINIT_SSH_PWAUTH="yes"
+    CLOUDINIT_ACCESS_MODE="password"
     echo -e "${ROOTSSH:-${TAB:-  }[SSH]${TAB:-  }${CL:-}}${BOLD:-}${DGN:-}SSH Keys: ${BGN:-}none found${CL:-}"
     CLOUDINIT_PASSWORD=$(openssl rand -base64 16)
     echo -e "${CLOUD:-${TAB:-  }[Cloud-Init]${TAB:-  }${CL:-}}${BOLD:-}${DGN:-}Cloud-Init access: ${BGN:-}${CLOUDINIT_USER} with generated password${CL:-}"
   fi
   export CLOUDINIT_ENABLE USE_CLOUD_INIT CLOUDINIT_USER CLOUDINIT_NETWORK_MODE CLOUDINIT_IP \
-    CLOUDINIT_GW CLOUDINIT_DNS CLOUDINIT_PASSWORD CLOUDINIT_SSH_PWAUTH
+    CLOUDINIT_GW CLOUDINIT_DNS CLOUDINIT_PASSWORD CLOUDINIT_SSH_PWAUTH CLOUDINIT_ACCESS_MODE
 }
 
 ubuntu_configure_cloud_init_advanced() {
@@ -333,7 +336,7 @@ ubuntu_configure_image_access() {
   local image="$1"
 
   ubuntu_ensure_virt_customize
-  if [[ "${CLOUDINIT_ENABLE:-no}" == "yes" ]]; then
+  if [[ "${CLOUDINIT_ENABLE:-no}" == "yes" && "${CLOUDINIT_ACCESS_MODE:-}" != "console" ]]; then
     virt-customize -q -a "$image" --run-command \
       "mkdir -p /etc/cloud/cloud.cfg.d && printf 'ssh_pwauth: ${CLOUDINIT_SSH_PWAUTH:-yes}\\n' > /etc/cloud/cloud.cfg.d/99-community-scripts-ssh-pwauth.cfg" \
       >/dev/null 2>&1
@@ -375,9 +378,13 @@ ubuntu_setup_cloud_init() {
   CLOUDINIT_CRED_FILE="/tmp/${HN}-${VMID}-cloud-init-credentials.txt"
   local network_summary="DHCP"
   local dns_summary="provided by DHCP"
+  local ssh_summary="ssh ${CLOUDINIT_USER}@<vm-ip>"
   if [[ "${CLOUDINIT_NETWORK_MODE:-dhcp}" == "static" ]]; then
     network_summary="static (IP: ${CLOUDINIT_IP}${CLOUDINIT_GW:+, GW: ${CLOUDINIT_GW}})"
     dns_summary="${CLOUDINIT_DNS:-not configured}"
+  fi
+  if [[ "${CLOUDINIT_ACCESS_MODE:-}" == "console" ]]; then
+    ssh_summary="unavailable (no password or SSH key configured)"
   fi
   umask 077
   cat >"$CLOUDINIT_CRED_FILE" <<EOF
@@ -387,12 +394,13 @@ VM ID:    ${VMID}
 Hostname: ${HN}
 
 Username: ${CLOUDINIT_USER}
-Password: ${CLOUDINIT_PASSWORD:-not configured (SSH key authentication)}
+Password: ${CLOUDINIT_PASSWORD:-not configured}
+Access:   $([[ "${CLOUDINIT_ACCESS_MODE:-}" == "console" ]] && echo "Proxmox console root auto-login (SSH disabled)" || echo "${CLOUDINIT_ACCESS_MODE:-not configured}")
 Network:  ${network_summary}
 DNS:      ${dns_summary}
 
 SSH Access:
-  ssh ${CLOUDINIT_USER}@<vm-ip>
+  ${ssh_summary}
 
 Delete this file after noting the credentials:
   rm -f ${CLOUDINIT_CRED_FILE}
@@ -413,10 +421,19 @@ ubuntu_cleanup_cloud_init() {
 
 ubuntu_display_cloud_init_info() {
   if [[ "${CLOUDINIT_ENABLE:-no}" == "yes" ]]; then
+    local access_mode="${CLOUDINIT_ACCESS_MODE:-password}"
+    local access_summary
+    case "$access_mode" in
+    ssh-key) access_summary="SSH key authentication" ;;
+    password) access_summary="password authentication" ;;
+    console) access_summary="Proxmox console root auto-login (SSH disabled)" ;;
+    *) access_summary="not configured" ;;
+    esac
     echo -e "Cloud-Init configured for user ${CLOUDINIT_USER}.\n
-Password: ${CLOUDINIT_PASSWORD:-not configured (SSH key authentication)}\n
+Password: ${CLOUDINIT_PASSWORD:-not configured}\n
+Access: ${access_summary}\n
 SSH key authentication: $([ -n "${CLOUDINIT_SSH_KEYS:-}" ] && echo configured || echo not configured)\n
-SSH password authentication: $([ "${CLOUDINIT_SSH_PWAUTH:-yes}" = "yes" ] && echo enabled || echo disabled)\n
+SSH password authentication: $([ "${CLOUDINIT_SSH_PWAUTH:-no}" = "yes" ] && echo enabled || echo disabled)\n
 Credentials: ${CLOUDINIT_CRED_FILE:-not created}\n
 More info at https://github.com/community-scripts/ProxmoxVED/discussions/272 \n"
   else
