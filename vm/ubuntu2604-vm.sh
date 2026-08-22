@@ -21,6 +21,22 @@ function get_valid_nextid() {
 APP="Ubuntu 26.04 VM"
 APP_TYPE="vm"
 NSAPP="ubuntu2604-vm"
+
+function header_info() {
+  if command -v clear >/dev/null 2>&1; then
+    clear 2>/dev/null || true
+  else
+    printf '\033[H\033[2J\033[3J'
+  fi
+  cat <<'EOF'
+   __  ____                __           ___  __ __   _______     _    ____  ___
+  / / / / /_  __  ______  / /___  __   |__ \/ // /  <  / __ \   | |  / /  |/  /
+ / / / / __ \/ / / / __ \/ __/ / / /   __/ / // /_  / / / / /   | | / / /|_/ /
+ /_/ / /_/ / /_/ / / / / /_/ /_/ /   / __/__  __/ / / /_/ /    | |/ / /  / /
+\____/_.___/\__,_/_/ /_/\__\/\__,_/   /____/ /_/ (_)_/\____/     |___/_/  /_/  (Ubuntu 26.04)
+EOF
+}
+
 GEN_MAC=02:$(openssl rand -hex 5 | awk '{print toupper($0)}' | sed 's/\(..\)/\1:/g; s/.$//')
 RANDOM_UUID="$(cat /proc/sys/kernel/random/uuid)"
 METHOD=""
