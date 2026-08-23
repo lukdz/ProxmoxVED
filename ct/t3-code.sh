@@ -39,6 +39,17 @@ root_exec() {
     DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/0/bus \
     NPM_CONFIG_PREFIX=/usr/local \
     NPM_CONFIG_CACHE=/root/.cache/npm \
+    DO_NOT_TRACK=1 \
+    GH_TELEMETRY=false \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+    DISABLE_TELEMETRY=1 \
+    DISABLE_ERROR_REPORTING=1 \
+    DISABLE_FEEDBACK_COMMAND=1 \
+    CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1 \
+    GROK_TELEMETRY_ENABLED=0 \
+    GROK_TELEMETRY_TRACE_UPLOAD=0 \
+    GROK_TELEMETRY_MIXPANEL_ENABLED=0 \
+    GROK_EXTERNAL_OTEL=0 \
     "$@"
 }
 
@@ -86,10 +97,125 @@ Environment=NPM_CONFIG_PREFIX=/usr/local
 Environment=T3CODE_HOME=${t3_data}
 Environment=T3CODE_HOST=0.0.0.0
 Environment=T3CODE_PORT=3773
+Environment=DO_NOT_TRACK=1
+Environment=GH_TELEMETRY=false
+Environment=CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+Environment=DISABLE_TELEMETRY=1
+Environment=DISABLE_ERROR_REPORTING=1
+Environment=DISABLE_FEEDBACK_COMMAND=1
+Environment=CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1
+Environment=GROK_TELEMETRY_ENABLED=0
+Environment=GROK_TELEMETRY_TRACE_UPLOAD=0
+Environment=GROK_TELEMETRY_MIXPANEL_ENABLED=0
+Environment=GROK_EXTERNAL_OTEL=0
 EOF
   chown root:root \
     /root/.config/systemd/user/t3code.service.d \
     /root/.config/systemd/user/t3code.service.d/10-network.conf
+}
+
+configure_codex_privacy() {
+  local config_file=/root/.codex/config.toml
+
+  mkdir -p /root/.codex
+  if [[ -f "$config_file" ]]; then
+    awk '
+      function finish_section() {
+        if (section == "analytics" && !key_seen) print "enabled = false"
+        if (section == "otel" && !key_seen) print "exporter = \"none\""
+        if (section == "history" && !key_seen) print "persistence = \"none\""
+      }
+      /^[[:space:]]*\[/ {
+        finish_section()
+        section = "other"
+        key_seen = 0
+        if ($0 ~ /^[[:space:]]*\[analytics\][[:space:]]*$/) {
+          section = "analytics"
+          analytics_seen = 1
+        } else if ($0 ~ /^[[:space:]]*\[otel\][[:space:]]*$/) {
+          section = "otel"
+          otel_seen = 1
+        } else if ($0 ~ /^[[:space:]]*\[history\][[:space:]]*$/) {
+          section = "history"
+          history_seen = 1
+        }
+        print
+        next
+      }
+      section == "analytics" && $0 ~ /^[[:space:]]*enabled[[:space:]]*=/ {
+        print "enabled = false"
+        key_seen = 1
+        next
+      }
+      section == "otel" && $0 ~ /^[[:space:]]*exporter[[:space:]]*=/ {
+        print "exporter = \"none\""
+        key_seen = 1
+        next
+      }
+      section == "history" && $0 ~ /^[[:space:]]*persistence[[:space:]]*=/ {
+        print "persistence = \"none\""
+        key_seen = 1
+        next
+      }
+      { print }
+      END {
+        finish_section()
+        if (!analytics_seen) print "\n[analytics]\nenabled = false"
+        if (!otel_seen) print "\n[otel]\nexporter = \"none\""
+        if (!history_seen) print "\n[history]\npersistence = \"none\""
+      }
+    ' "$config_file" >"$config_file.tmp" && mv "$config_file.tmp" "$config_file"
+  else
+    cat <<'EOF' >"$config_file"
+[analytics]
+enabled = false
+
+[otel]
+exporter = "none"
+
+[history]
+persistence = "none"
+EOF
+  fi
+  chmod 600 "$config_file"
+}
+
+configure_opencode_privacy() {
+  mkdir -p /etc/opencode
+  if [[ -f /etc/opencode/opencode.json ]]; then
+    jq '. + {share: "disabled"}' /etc/opencode/opencode.json >/etc/opencode/opencode.json.tmp \
+      && mv /etc/opencode/opencode.json.tmp /etc/opencode/opencode.json
+  else
+    cat <<'EOF' >/etc/opencode/opencode.json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+EOF
+  fi
+  chmod 644 /etc/opencode/opencode.json
+}
+
+configure_t3_privacy() {
+  cat <<'EOF' >/etc/profile.d/t3-code-privacy.sh
+# T3 Code privacy defaults. Provider training controls remain account-specific.
+export DO_NOT_TRACK=1
+export GH_TELEMETRY=false
+export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+export DISABLE_TELEMETRY=1
+export DISABLE_ERROR_REPORTING=1
+export DISABLE_FEEDBACK_COMMAND=1
+export CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1
+export GROK_TELEMETRY_ENABLED=0
+export GROK_TELEMETRY_TRACE_UPLOAD=0
+export GROK_TELEMETRY_MIXPANEL_ENABLED=0
+export GROK_EXTERNAL_OTEL=0
+EOF
+  chmod 644 /etc/profile.d/t3-code-privacy.sh
+  configure_codex_privacy
+  configure_opencode_privacy
+  [[ -x /usr/bin/gh ]] && root_exec /usr/bin/gh config set telemetry disabled
+  [[ -x /usr/bin/az ]] && root_exec /usr/bin/az config set core.collect_telemetry=false core.survey_message=no
 }
 
 fix_resource_monitor_permissions() {
@@ -150,6 +276,7 @@ function update_script() {
   if ! migrate_t3_data; then
     exit 1
   fi
+  configure_t3_privacy
   configure_t3_service_environment
   root_exec /usr/bin/systemctl --user daemon-reload
   if [[ "$t3_data_migrated" -eq 1 ]]; then

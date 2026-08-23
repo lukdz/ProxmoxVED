@@ -81,6 +81,18 @@
     {
       "text": "The arm64 path has not been tested yet. Native node-pty dependencies may require a successful build on the target architecture.",
       "type": "warning"
+    },
+    {
+      "text": "This template disables supported client telemetry defaults for the root T3 runtime: Claude Code nonessential traffic, telemetry, error reporting, feedback, and surveys; Grok telemetry and trace uploads; GitHub CLI telemetry; and Azure CLI telemetry and survey messages. GitLab CLI has no verified official telemetry opt-out setting, so DO_NOT_TRACK is inherited only as a best-effort convention.",
+      "type": "info"
+    },
+    {
+      "text": "Model training and provider retention are not controlled by T3 Code or generic telemetry flags. Disable OpenAI model improvement in ChatGPT Data Controls, Anthropic model improvement at https://claude.ai/settings/data-privacy-controls, and Grok coding-data sharing/retention through /privacy. OpenCode public conversation sharing is disabled by this template, but the configured model provider's policy still applies.",
+      "type": "warning"
+    },
+    {
+      "text": "Codex local history persistence is disabled for the root runtime. Existing history files are not deleted. Provider authentication and privacy account settings are never changed automatically.",
+      "type": "info"
     }
   ]
 }

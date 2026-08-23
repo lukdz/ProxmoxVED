@@ -61,7 +61,122 @@ root_exec() {
     DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/0/bus \
     NPM_CONFIG_PREFIX=/usr/local \
     NPM_CONFIG_CACHE=/root/.cache/npm \
+    DO_NOT_TRACK=1 \
+    GH_TELEMETRY=false \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+    DISABLE_TELEMETRY=1 \
+    DISABLE_ERROR_REPORTING=1 \
+    DISABLE_FEEDBACK_COMMAND=1 \
+    CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1 \
+    GROK_TELEMETRY_ENABLED=0 \
+    GROK_TELEMETRY_TRACE_UPLOAD=0 \
+    GROK_TELEMETRY_MIXPANEL_ENABLED=0 \
+    GROK_EXTERNAL_OTEL=0 \
     "$@"
+}
+
+configure_codex_privacy() {
+  local config_file=/root/.codex/config.toml
+
+  mkdir -p /root/.codex
+  if [[ -f "$config_file" ]]; then
+    awk '
+      function finish_section() {
+        if (section == "analytics" && !key_seen) print "enabled = false"
+        if (section == "otel" && !key_seen) print "exporter = \"none\""
+        if (section == "history" && !key_seen) print "persistence = \"none\""
+      }
+      /^[[:space:]]*\[/ {
+        finish_section()
+        section = "other"
+        key_seen = 0
+        if ($0 ~ /^[[:space:]]*\[analytics\][[:space:]]*$/) {
+          section = "analytics"
+          analytics_seen = 1
+        } else if ($0 ~ /^[[:space:]]*\[otel\][[:space:]]*$/) {
+          section = "otel"
+          otel_seen = 1
+        } else if ($0 ~ /^[[:space:]]*\[history\][[:space:]]*$/) {
+          section = "history"
+          history_seen = 1
+        }
+        print
+        next
+      }
+      section == "analytics" && $0 ~ /^[[:space:]]*enabled[[:space:]]*=/ {
+        print "enabled = false"
+        key_seen = 1
+        next
+      }
+      section == "otel" && $0 ~ /^[[:space:]]*exporter[[:space:]]*=/ {
+        print "exporter = \"none\""
+        key_seen = 1
+        next
+      }
+      section == "history" && $0 ~ /^[[:space:]]*persistence[[:space:]]*=/ {
+        print "persistence = \"none\""
+        key_seen = 1
+        next
+      }
+      { print }
+      END {
+        finish_section()
+        if (!analytics_seen) print "\n[analytics]\nenabled = false"
+        if (!otel_seen) print "\n[otel]\nexporter = \"none\""
+        if (!history_seen) print "\n[history]\npersistence = \"none\""
+      }
+    ' "$config_file" >"$config_file.tmp" && mv "$config_file.tmp" "$config_file" || return 1
+  else
+    cat <<'EOF' >"$config_file"
+[analytics]
+enabled = false
+
+[otel]
+exporter = "none"
+
+[history]
+persistence = "none"
+EOF
+  fi
+  chmod 600 "$config_file"
+}
+
+configure_opencode_privacy() {
+  mkdir -p /etc/opencode
+  if [[ -f /etc/opencode/opencode.json ]]; then
+    jq '. + {share: "disabled"}' /etc/opencode/opencode.json >/etc/opencode/opencode.json.tmp \
+      && mv /etc/opencode/opencode.json.tmp /etc/opencode/opencode.json || return 1
+  else
+    cat <<'EOF' >/etc/opencode/opencode.json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+EOF
+  fi
+  chmod 644 /etc/opencode/opencode.json
+}
+
+configure_t3_privacy() {
+  msg_info "Configuring Privacy Defaults"
+  cat <<'EOF' >/etc/profile.d/t3-code-privacy.sh
+# T3 Code privacy defaults. Provider training controls remain account-specific.
+export DO_NOT_TRACK=1
+export GH_TELEMETRY=false
+export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+export DISABLE_TELEMETRY=1
+export DISABLE_ERROR_REPORTING=1
+export DISABLE_FEEDBACK_COMMAND=1
+export CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1
+export GROK_TELEMETRY_ENABLED=0
+export GROK_TELEMETRY_TRACE_UPLOAD=0
+export GROK_TELEMETRY_MIXPANEL_ENABLED=0
+export GROK_EXTERNAL_OTEL=0
+EOF
+  chmod 644 /etc/profile.d/t3-code-privacy.sh
+  configure_codex_privacy
+  configure_opencode_privacy
+  msg_ok "Configured Privacy Defaults"
 }
 
 stop_legacy_t3_service() {
@@ -213,6 +328,20 @@ show_source_control_login_commands() {
   msg_ok "Source Control Authentication Instructions"
 }
 
+show_privacy_instructions() {
+  stop_spinner
+  echo
+  echo -e "${INFO}${BOLD}${DGN}Provider Privacy Actions${CL}"
+  echo
+  echo -e "${TAB}${YW}Telemetry defaults are disabled for the T3 root runtime. Model training and retention remain provider account settings:${CL}"
+  echo -e "${TAB}${BGN}OpenAI: disable 'Improve the model for everyone' in ChatGPT Data Controls.${CL}"
+  echo -e "${TAB}${BGN}Anthropic: disable model improvement at https://claude.ai/settings/data-privacy-controls${CL}"
+  echo -e "${TAB}${BGN}Grok: run /privacy in Grok Build and disable coding-data sharing/retention.${CL}"
+  echo -e "${TAB}${BGN}OpenCode: public conversation sharing is disabled by this template; provider policy still applies.${CL}"
+  echo -e "${TAB}${YW}GitLab CLI has no verified official telemetry opt-out setting; DO_NOT_TRACK is inherited as a best-effort convention.${CL}"
+  msg_ok "Provider Privacy Instructions"
+}
+
 finish_t3_service_setup() {
   local expected_version="${1:-}"
   local installed_version
@@ -261,7 +390,19 @@ Environment=NPM_CONFIG_PREFIX=/usr/local
 Environment=T3CODE_HOME=${t3_data}
 Environment=T3CODE_HOST=0.0.0.0
 Environment=T3CODE_PORT=3773
+Environment=DO_NOT_TRACK=1
+Environment=GH_TELEMETRY=false
+Environment=CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+Environment=DISABLE_TELEMETRY=1
+Environment=DISABLE_ERROR_REPORTING=1
+Environment=DISABLE_FEEDBACK_COMMAND=1
+Environment=CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1
+Environment=GROK_TELEMETRY_ENABLED=0
+Environment=GROK_TELEMETRY_TRACE_UPLOAD=0
+Environment=GROK_TELEMETRY_MIXPANEL_ENABLED=0
+Environment=GROK_EXTERNAL_OTEL=0
 EOF
+configure_t3_privacy
 root_exec /usr/bin/systemctl --user daemon-reload
 root_exec /usr/bin/systemctl --user restart t3code.service
 if ! root_exec /usr/bin/systemctl --user is-active --quiet t3code.service; then
@@ -272,6 +413,12 @@ msg_ok "Configured Network Access"
 
 install_selected_providers
 install_source_control_tools
+if [[ -x /usr/bin/gh ]]; then
+  root_exec /usr/bin/gh config set telemetry disabled
+fi
+if [[ -x /usr/bin/az ]]; then
+  root_exec /usr/bin/az config set core.collect_telemetry=false core.survey_message=no
+fi
 if [[ "${t3_providers_installed:-0}" -eq 1 || "${t3_source_control_configured:-0}" -eq 1 ]]; then
   msg_info "Refreshing T3 Integration Status"
   root_exec /usr/bin/systemctl --user restart t3code.service
@@ -305,6 +452,7 @@ fi
 
 show_provider_login_commands
 show_source_control_login_commands
+show_privacy_instructions
 
 motd_ssh
 customize
