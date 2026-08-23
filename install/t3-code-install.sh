@@ -328,20 +328,6 @@ show_source_control_login_commands() {
   msg_ok "Source Control Authentication Instructions"
 }
 
-show_privacy_instructions() {
-  stop_spinner
-  echo
-  echo -e "${INFO}${BOLD}${DGN}Provider Privacy Actions${CL}"
-  echo
-  echo -e "${TAB}${YW}Telemetry defaults are disabled for the T3 root runtime. Model training and retention remain provider account settings:${CL}"
-  echo -e "${TAB}${BGN}OpenAI: disable 'Improve the model for everyone' in ChatGPT Data Controls.${CL}"
-  echo -e "${TAB}${BGN}Anthropic: disable model improvement at https://claude.ai/settings/data-privacy-controls${CL}"
-  echo -e "${TAB}${BGN}Grok: run /privacy in Grok Build and disable coding-data sharing/retention.${CL}"
-  echo -e "${TAB}${BGN}OpenCode: public conversation sharing is disabled by this template; provider policy still applies.${CL}"
-  echo -e "${TAB}${YW}GitLab CLI has no verified official telemetry opt-out setting; DO_NOT_TRACK is inherited as a best-effort convention.${CL}"
-  msg_ok "Provider Privacy Instructions"
-}
-
 finish_t3_service_setup() {
   local expected_version="${1:-}"
   local installed_version
@@ -452,7 +438,6 @@ fi
 
 show_provider_login_commands
 show_source_control_login_commands
-show_privacy_instructions
 
 motd_ssh
 customize
