@@ -16,12 +16,10 @@ var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
 #var_arm64="${var_arm64:-no}" # unset = ask the user; set yes/no only when verified
 var_unprivileged="${var_unprivileged:-1}"
-export var_t3_providers="${var_t3_providers:-}"
+export var_t3_providers="${var_t3_providers:-codex,claude,grok,opencode}"
 export var_t3_version_control="${var_t3_version_control:-git}"
-export var_t3_source_control="${var_t3_source_control:-}"
+export var_t3_source_control="${var_t3_source_control:-github,gitlab,azure}"
 
-t3_user="t3"
-t3_home="/home/${t3_user}"
 t3_data="/opt/t3-code_data"
 
 header_info "$APP"
@@ -29,123 +27,46 @@ variables
 color
 catch_errors
 
-t3_list_values() {
-  local value="${1:-}"
-  [[ -z "$value" || "$value" == "none" ]] && {
-    printf 'none'
-    return
-  }
-  printf '%s' "${value//,/", "}"
-}
-
-advanced_settings_app_configure() {
-  local selected
-  local git_state="off"
-  local codex_state="off"
-  local claude_state="off"
-  local grok_state="off"
-  local opencode_state="off"
-  local github_state="off"
-  local gitlab_state="off"
-  local azure_state="off"
-
-  [[ ",${var_t3_version_control,,}," == *,git,* ]] && git_state="on"
-  [[ ",${var_t3_providers,,}," == *,codex,* ]] && codex_state="on"
-  [[ ",${var_t3_providers,,}," == *,claude,* ]] && claude_state="on"
-  [[ ",${var_t3_providers,,}," == *,grok,* ]] && grok_state="on"
-  [[ ",${var_t3_providers,,}," == *,opencode,* ]] && opencode_state="on"
-  [[ ",${var_t3_source_control,,}," == *,github,* ]] && github_state="on"
-  [[ ",${var_t3_source_control,,}," == *,gitlab,* ]] && gitlab_state="on"
-  [[ ",${var_t3_source_control,,}," == *,azure,* ]] && azure_state="on"
-
-  selected=$(whiptail \
-    --backtitle "Proxmox VE Helper Scripts" \
-    --title "T3 Code Version Control" \
-    --ok-button "Continue" \
-    --cancel-button "Skip Version Control" \
-    --separate-output \
-    --checklist "\nSelect version-control tools to install for the t3 user.\n\nUse Space to toggle and Enter to continue.\nGit is selected by default." \
-    15 86 1 \
-    git "Git" "$git_state" \
-    3>&1 1>&2 2>&3) || selected=""
-  var_t3_version_control="${selected//$'\n'/,}"
-  var_t3_version_control="${var_t3_version_control//[[:space:]]/}"
-  [[ -z "$var_t3_version_control" ]] && var_t3_version_control="none"
-  export var_t3_version_control
-
-  selected=$(whiptail \
-    --backtitle "Proxmox VE Helper Scripts" \
-    --title "T3 Code Agent Providers" \
-    --ok-button "Continue" \
-    --cancel-button "Skip Providers" \
-    --separate-output \
-    --checklist "\nSelect provider CLIs to install for the t3 user.\n\nUse Space to toggle and Enter to continue.\nAuthentication is not performed automatically.\nCursor is not installed by this script." \
-    20 86 4 \
-    codex "OpenAI Codex CLI" "$codex_state" \
-    claude "Claude Code CLI" "$claude_state" \
-    grok "Grok Build CLI" "$grok_state" \
-    opencode "OpenCode CLI" "$opencode_state" \
-    3>&1 1>&2 2>&3) || selected=""
-  var_t3_providers="${selected//$'\n'/,}"
-  var_t3_providers="${var_t3_providers//[[:space:]]/}"
-  export var_t3_providers
-
-  selected=$(whiptail \
-    --backtitle "Proxmox VE Helper Scripts" \
-    --title "T3 Code Source Control" \
-    --ok-button "Continue" \
-    --cancel-button "Skip Source Control" \
-    --separate-output \
-    --checklist "\nSelect source-control CLIs to install for the t3 user.\n\nUse Space to toggle and Enter to continue.\nAuthentication is not performed automatically." \
-    18 86 3 \
-    github "GitHub CLI (gh)" "$github_state" \
-    gitlab "GitLab CLI (glab)" "$gitlab_state" \
-    azure "Azure CLI + DevOps extension" "$azure_state" \
-    3>&1 1>&2 2>&3) || selected=""
-  var_t3_source_control="${selected//$'\n'/,}"
-  var_t3_source_control="${var_t3_source_control//[[:space:]]/}"
-  [[ -z "$var_t3_source_control" ]] && var_t3_source_control="none"
-  export var_t3_source_control
-}
-
-advanced_settings_app_summary() {
-  printf 'T3 Code:\n'
-  printf '  Version Control: %s\n' "$(t3_list_values "${var_t3_version_control:-none}")"
-  printf '  Agent CLIs: %s\n' "$(t3_list_values "${var_t3_providers:-none}")"
-  printf '  Source Control: %s' "$(t3_list_values "${var_t3_source_control:-none}")"
-}
-
-t3_exec() {
-  $STD runuser --user "$t3_user" -- env \
-    HOME="$t3_home" \
-    USER="$t3_user" \
-    LOGNAME="$t3_user" \
+root_exec() {
+  $STD env \
+    HOME=/root \
+    USER=root \
+    LOGNAME=root \
     SHELL=/bin/bash \
-    PATH="$t3_home/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     T3CODE_HOME="$t3_data" \
-    XDG_RUNTIME_DIR="/run/user/${t3_uid}" \
-    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${t3_uid}/bus" \
-    NPM_CONFIG_PREFIX="$t3_home/.local" \
-    NPM_CONFIG_CACHE="$t3_home/.cache/npm" \
+    XDG_RUNTIME_DIR=/run/user/0 \
+    DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/0/bus \
+    NPM_CONFIG_PREFIX=/usr/local \
+    NPM_CONFIG_CACHE=/root/.cache/npm \
     "$@"
+}
+
+stop_legacy_t3_service() {
+  if id t3 >/dev/null 2>&1; then
+    runuser --user t3 -- env \
+      XDG_RUNTIME_DIR="/run/user/$(id -u t3)" \
+      DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u t3)/bus" \
+      /usr/bin/systemctl --user stop t3code.service 2>/dev/null || true
+  fi
 }
 
 migrate_t3_data() {
   t3_data_migrated=0
-  if [[ -d "$t3_home/.t3" && ! -e "$t3_data" ]]; then
+  if [[ -d /home/t3/.t3 && ! -e "$t3_data" ]]; then
     msg_info "Migrating T3 Code Data"
-    t3_exec /usr/bin/systemctl --user stop t3code.service 2>/dev/null || true
-    mv "$t3_home/.t3" "$t3_data"
-    chown -R "$t3_user:$t3_user" "$t3_data"
+    stop_legacy_t3_service
+    mv /home/t3/.t3 "$t3_data"
+    chown -R root:root "$t3_data"
     t3_data_migrated=1
     msg_ok "Migrated T3 Code Data"
-  elif [[ -d "$t3_home/.t3" && -d "$t3_data" ]]; then
+  elif [[ -d /home/t3/.t3 && -d "$t3_data" ]]; then
     if [[ -z "$(find "$t3_data" -mindepth 1 -print -quit 2>/dev/null)" ]]; then
       msg_info "Migrating T3 Code Data"
-      t3_exec /usr/bin/systemctl --user stop t3code.service 2>/dev/null || true
+      stop_legacy_t3_service
       rmdir "$t3_data"
-      mv "$t3_home/.t3" "$t3_data"
-      chown -R "$t3_user:$t3_user" "$t3_data"
+      mv /home/t3/.t3 "$t3_data"
+      chown -R root:root "$t3_data"
       t3_data_migrated=1
       msg_ok "Migrated T3 Code Data"
     else
@@ -156,19 +77,19 @@ migrate_t3_data() {
 }
 
 configure_t3_service_environment() {
-  mkdir -p "$t3_home/.config/systemd/user/t3code.service.d"
-  cat <<EOF >"$t3_home/.config/systemd/user/t3code.service.d/10-network.conf"
+  mkdir -p /root/.config/systemd/user/t3code.service.d
+  cat <<EOF >/root/.config/systemd/user/t3code.service.d/10-network.conf
 [Service]
-Environment=HOME=${t3_home}
-Environment=PATH=${t3_home}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-Environment=NPM_CONFIG_PREFIX=${t3_home}/.local
+Environment=HOME=/root
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=NPM_CONFIG_PREFIX=/usr/local
 Environment=T3CODE_HOME=${t3_data}
 Environment=T3CODE_HOST=0.0.0.0
 Environment=T3CODE_PORT=3773
 EOF
-  chown "$t3_user:$t3_user" \
-    "$t3_home/.config/systemd/user/t3code.service.d" \
-    "$t3_home/.config/systemd/user/t3code.service.d/10-network.conf"
+  chown root:root \
+    /root/.config/systemd/user/t3code.service.d \
+    /root/.config/systemd/user/t3code.service.d/10-network.conf
 }
 
 fix_resource_monitor_permissions() {
@@ -187,8 +108,8 @@ finish_t3_service_setup() {
   local expected_version="${1:-}"
   local installed_version
 
-  $STD loginctl enable-linger "$t3_user"
-  if [[ ! -f "$t3_home/.config/systemd/user/t3code.service" ||
+  $STD loginctl enable-linger root
+  if [[ ! -f /root/.config/systemd/user/t3code.service ||
     ! -f "$t3_data/runtime/service-launcher.mjs" ||
     ! -f "$t3_data/runtime/service-state.json" ]]; then
     return 1
@@ -200,8 +121,8 @@ finish_t3_service_setup() {
   [[ -f "$t3_data/runtime/versions/${installed_version}/node_modules/t3/dist/bin.mjs" ]] || return 1
   [[ -f "$t3_data/runtime/versions/${installed_version}/.install-complete" ]] || return 1
 
-  t3_exec /usr/bin/systemctl --user daemon-reload
-  t3_exec /usr/bin/systemctl --user enable t3code.service
+  root_exec /usr/bin/systemctl --user daemon-reload
+  root_exec /usr/bin/systemctl --user enable t3code.service
 }
 
 sync_t3_version() {
@@ -221,20 +142,19 @@ function update_script() {
   check_container_storage
   check_container_resources
 
-  if ! id "$t3_user" >/dev/null 2>&1 || [[ ! -f "$t3_home/.config/systemd/user/t3code.service" ]]; then
+  if [[ ! -f /root/.config/systemd/user/t3code.service ]]; then
     msg_error "No ${APP} Installation Found!"
     exit
   fi
 
-  t3_uid="$(id -u "$t3_user")"
   if ! migrate_t3_data; then
     exit 1
   fi
   configure_t3_service_environment
-  t3_exec /usr/bin/systemctl --user daemon-reload
+  root_exec /usr/bin/systemctl --user daemon-reload
   if [[ "$t3_data_migrated" -eq 1 ]]; then
-    t3_exec /usr/bin/systemctl --user restart t3code.service
-    if ! t3_exec /usr/bin/systemctl --user is-active --quiet t3code.service; then
+    root_exec /usr/bin/systemctl --user restart t3code.service
+    if ! root_exec /usr/bin/systemctl --user is-active --quiet t3code.service; then
       msg_error "${APP} service failed to start after data migration"
       exit 1
     fi
@@ -245,26 +165,26 @@ function update_script() {
     NODE_VERSION="24" setup_nodejs
 
     msg_info "Updating ${APP}"
-    if ! t3_exec /usr/bin/npx --yes "t3@${CHECK_UPDATE_RELEASE#v}" service update --base-dir "$t3_data"; then
-      msg_warn "T3 could not enable lingering from the unprivileged user; completing service setup as root."
+    if ! root_exec /usr/bin/npx --yes "t3@${CHECK_UPDATE_RELEASE#v}" service update --base-dir "$t3_data"; then
+      msg_warn "T3 could not enable lingering for root; completing service setup as root."
       if ! finish_t3_service_setup "${CHECK_UPDATE_RELEASE#v}"; then
         msg_error "T3 Code service update failed"
         exit 1
       fi
     fi
     fix_resource_monitor_permissions
-    t3_exec /usr/bin/systemctl --user restart t3code.service
+    root_exec /usr/bin/systemctl --user restart t3code.service
     sync_t3_version
     msg_ok "Updated ${APP}"
 
-    if ! t3_exec /usr/bin/systemctl --user is-active --quiet t3code.service; then
+    if ! root_exec /usr/bin/systemctl --user is-active --quiet t3code.service; then
       msg_error "${APP} service failed to start"
       exit 1
     fi
     msg_ok "Updated successfully!"
   elif [[ "$t3_resource_monitor_repaired" -eq 1 ]]; then
     msg_info "Restarting ${APP} after resource monitor repair"
-    t3_exec /usr/bin/systemctl --user restart t3code.service
+    root_exec /usr/bin/systemctl --user restart t3code.service
     msg_ok "Restarted ${APP}"
   fi
   exit
@@ -279,5 +199,5 @@ echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW}Access it using the following URL:${CL}"
 echo -e "${GATEWAY}${BGN}http://${IP}:3773${CL}"
 echo -e "${INFO}${YW}A one-time pairing URL with a one-hour lifetime is printed during installation.${CL}"
-echo -e "${INFO}${YW}To generate another one inside the container as the t3 user:${CL}"
+echo -e "${INFO}${YW}To generate another one inside the container as root:${CL}"
 echo -e "${TAB}${BGN}npx --yes t3@latest pair --base-dir /opt/t3-code_data --ttl 1h${CL}"

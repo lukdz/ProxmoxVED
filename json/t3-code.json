@@ -2,7 +2,7 @@
   "name": "T3 Code",
   "slug": "t3-code",
   "categories": [20],
-  "date_created": "2026-08-22",
+  "date_created": "2026-08-23",
   "type": "ct",
   "updateable": true,
   "privileged": false,
@@ -31,22 +31,22 @@
       "name": "var_t3_providers",
       "label": "Provider CLIs",
       "type": "text",
-      "default": "",
-      "help": "Optional comma-separated values: codex, claude, grok, opencode. Advanced installs show a selection menu. Authentication is always manual. Cursor is supported by T3 Code but is not installed automatically because its upstream installer is not compatible with community-scripts helper requirements."
+      "default": "codex,claude,grok,opencode",
+      "help": "Comma-separated values: codex, claude, grok, opencode. All are installed by default; Advanced installs show a selection menu where they can be deselected. Authentication is always manual. Cursor is supported by T3 Code but is not installed automatically because its upstream installer is not compatible with community-scripts helper requirements."
     },
     {
       "name": "var_t3_version_control",
       "label": "Version Control",
       "type": "text",
       "default": "git",
-      "help": "Advanced installs show a selection menu. Set to none to skip Git installation."
+      "help": "Git is installed by default. Advanced installs show a selection menu; set to none to skip Git installation."
     },
     {
       "name": "var_t3_source_control",
       "label": "Source Control CLIs",
       "type": "text",
-      "default": "",
-      "help": "Optional comma-separated values: github, gitlab, azure. Advanced installs show a selection menu. Authentication is always manual."
+      "default": "github,gitlab,azure",
+      "help": "Comma-separated values: github, gitlab, azure. All are installed by default; Advanced installs show a selection menu where they can be deselected. Authentication is always manual."
     }
   ],
   "default_credentials": {
@@ -55,15 +55,19 @@
   },
   "notes": [
     {
-      "text": "The service runs as the dedicated non-root t3 user. T3 Code data and runtime state are stored in /opt/t3-code_data so updates do not remove user data.",
+      "text": "The service runs as root inside the unprivileged LXC so project dependencies and tools can be installed without a separate user account. T3 Code data and runtime state are stored in /opt/t3-code_data so updates do not remove user data.",
       "type": "info"
     },
     {
-      "text": "Provider and source-control CLIs are optional. Selected CLIs are installed for the t3 user but are not authenticated automatically; the required pct exec commands are printed after installation.",
+      "text": "All projects and coding agents share the root account inside this container. Use separate LXCs for projects that require different trust boundaries; the unprivileged LXC protects the Proxmox host but does not isolate projects from one another.",
+      "type": "warning"
+    },
+    {
+      "text": "Provider and source-control CLIs are installed by default for the root T3 environment but can be deselected in Advanced mode. They are not authenticated automatically; the required pct exec commands are printed after installation.",
       "type": "info"
     },
     {
-      "text": "Cursor is supported by T3 Code but is not installed by this script because its upstream installer is a remote shell script. Install Cursor CLI separately for the t3 user if required.",
+      "text": "Cursor is supported by T3 Code but is not installed by this script because its upstream installer is a remote shell script. Install Cursor CLI separately inside the container if required.",
       "type": "info"
     },
     {
